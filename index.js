@@ -1,80 +1,40 @@
-const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion
-} = require("@whiskeysockets/baileys");
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
 
-const P = require("pino");
+const app = express();
+const PORT = process.env.PORT || 8000;
 
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("./auth");
-  const { version } = await fetchLatestBaileysVersion();
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-  const sock = makeWASocket({
-    version,
-    auth: state,
-    logger: P({ level: "silent" })
-  });
+// Pair Code Routes
+const pairRouter = require("./main");
+app.use("/", pairRouter);
 
-  // Pairing Code
-  if (!sock.authState.creds.registered) {
-    const phone = process.argv[2];
-    if (!phone) {
-      console.log("Usage: node index.js <phone_number>");
-      process.exit(1);
-    }
+// Home Page
+app.get("/", (req, res) => {
+    res.send({
+        status: true,
+        bot: "Kawshala-MD",
+        owner: "Kawshala",
+        message: "🚀 Kawshala-MD Pair Code Server is Running Successfully."
+    });
+});
 
-    const code = await sock.requestPairingCode(phone);
-    console.log(`Your Pairing Code: ${code}`);
-  }
+// Start Server
+app.listen(PORT, () => {
+    console.log(`
+╔════════════════════════════╗
+║     KAWSHALA-MD ONLINE     ║
+╠════════════════════════════╣
+║ Owner : Kawshala           ║
+║ Port  : ${PORT}            ║
+║ Status: Running ✅         ║
+╚════════════════════════════╝
+`);
+});
 
-  sock.ev.on("creds.update", saveCreds);
-
-  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
-    if (connection === "open") {
-      console.log("✅ Kawshala-MD Connected!");
-    }
-
-    if (connection === "close") {
-      const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-
-      if (shouldReconnect) {
-        console.log("♻️ Reconnecting...");
-        startBot();
-      } else {
-        console.log("❌ Logged Out.");
-      }
-    }
-  });
-
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message) return;
-
-    const text =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text ||
-      "";
-
-    if (text === ".ping") {
-      await sock.sendMessage(msg.key.remoteJid, {
-        text: "🏓 Pong! Kawshala-MD is Online."
-      });
-    }
-
-    if (text === ".menu") {
-      await sock.sendMessage(msg.key.remoteJid, {
-        text:
-`🤖 *Kawshala-MD*
-
-📌 Commands:
-.ping
-.menu`
-      });
-    }
-  });
-}
-
-startBot();
+module.exports = app;
